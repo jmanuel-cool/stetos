@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estetoscopio Electrónico</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#283747" />
+  <link rel="icon" type="image/png" sizes="192x192" href="images/logo-192.png" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>ESTETOSCOPIO ELECTRÓNICO</h1>
+      <p>ETIR Pedro León Torres • 4to Electromedicina</p>
+    </header>
+
+    <main id="screen-home">
+      <button id="btn-install" class="hidden">Instalar App</button>
+      <button id="btn-record">Grabar</button>
+      <button id="btn-analyze">Analizar</button>
+      <button id="btn-results">Resultados</button>
+      <button id="btn-exit">Salir</button>
+    </main>
+
+    <section id="screen-record" class="hidden">
+      <h2>Grabando... (12s)</h2>
+      <canvas id="waveform-live" width="760" height="300"></canvas>
+      <button id="btn-record-back">Atrás</button>
+    </section>
+
+    <section id="screen-results" class="hidden">
+      <h2>Resultados</h2>
+      <canvas id="waveform-result" width="570" height="380"></canvas>
+      <div id="times-list">
+        <h3>TIEMPO (s)</h3>
+        <ul id="time-values"></ul>
+      </div>
+      <div id="classification"></div>
+      <button id="btn-export-pdf">Exportar PDF</button>
+      <button id="btn-results-back">Atrás</button>
+    </section>
+  </div>
+
+  <script src="lib/tf.min.js"></script>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/stetos-pwa/sw.js');
+      });
+    }
+  </script>
+</body>
+</html>
