@@ -18,7 +18,7 @@
     </video>
   </div>
 
-  <!-- App principal -->
+  <!-- App principal (oculta al inicio) -->
   <div id="app" class="hidden">
     <button id="btn-help" class="help-button">❓</button>
 
@@ -54,7 +54,7 @@
     </section>
   </div>
 
-  <!-- Modal de ayuda -->
+  <!-- Modales -->
   <div id="help-modal" class="modal hidden">
     <div class="modal-content">
       <span id="close-help" class="close">&times;</span>
@@ -67,7 +67,6 @@
     </div>
   </div>
 
-  <!-- Advertencia de permisos (una sola vez) -->
   <div id="permission-modal" class="modal hidden">
     <div class="modal-content">
       <h2>Permisos necesarios</h2>
@@ -80,7 +79,27 @@
   <script src="lib/tf.min.js"></script>
   <script src="lib/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
+
+  <!-- ✅ Mecanismo de respaldo: forzar transición tras 5.5s -->
   <script>
+    // Forzar cierre del splash incluso si app.js falla
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      const app = document.getElementById('app');
+      if (splash && app) {
+        splash.classList.add('hidden');
+        app.classList.remove('hidden');
+        // Mostrar advertencia de permisos (una sola vez)
+        if (!localStorage.getItem('stetos-permission-shown')) {
+          setTimeout(() => {
+            const permModal = document.getElementById('permission-modal');
+            if (permModal) permModal.classList.remove('hidden');
+          }, 300);
+        }
+      }
+    }, 5500);
+
+    // Registrar Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/stetos-pwa/sw.js');
