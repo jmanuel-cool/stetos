@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Estetoscopio Electrónico</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
@@ -66,7 +66,7 @@
     </div>
   </div>
 
-  <!-- Modal de permisos (funcional) -->
+  <!-- Modal de permisos -->
   <div id="permission-modal" class="modal hidden">
     <div class="modal-content">
       <h2>Permisos necesarios</h2>
@@ -82,19 +82,16 @@
 
   <!-- Lógica crítica en línea -->
   <script>
-    // Permisos
     document.getElementById('btn-permission-ok').onclick = function() {
       document.getElementById('permission-modal').classList.add('hidden');
       localStorage.setItem('stetos-permission-shown', 'true');
     };
-    // Ayuda
     document.getElementById('close-help').onclick = function() {
       document.getElementById('help-modal').classList.add('hidden');
     };
     document.getElementById('btn-help').onclick = function() {
       document.getElementById('help-modal').classList.remove('hidden');
     };
-    // Splash fallback
     setTimeout(() => {
       const splash = document.getElementById('splash-screen');
       const app = document.getElementById('app');
@@ -109,12 +106,22 @@
         }
       }
     }, 5500);
-    // Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/stetos-pwa/sw.js');
       });
     }
+    // ✅ Fijar viewport en Android
+    function fixViewport() {
+      const app = document.getElementById('app');
+      if (app) {
+        app.style.height = window.innerHeight + 'px';
+        app.style.width = window.innerWidth + 'px';
+      }
+    }
+    window.addEventListener('load', fixViewport);
+    window.addEventListener('resize', fixViewport);
+    window.addEventListener('orientationchange', () => setTimeout(fixViewport, 300));
   </script>
 </body>
 </html>
