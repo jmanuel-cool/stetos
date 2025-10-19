@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Estetoscopio Electrónico</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
@@ -66,7 +66,7 @@
     </div>
   </div>
 
-  <!-- Modal de permisos -->
+  <!-- Modal de permisos (funcional) -->
   <div id="permission-modal" class="modal hidden">
     <div class="modal-content">
       <h2>Permisos necesarios</h2>
@@ -80,55 +80,41 @@
   <script src="lib/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 
+  <!-- Lógica crítica en línea -->
   <script>
-    // === Lógica crítica: debe ejecutarse después de app.js ===
-    document.addEventListener('DOMContentLoaded', () => {
-      // Permisos
-      document.getElementById('btn-permission-ok').onclick = function() {
-        document.getElementById('permission-modal').classList.add('hidden');
-        localStorage.setItem('stetos-permission-shown', 'true');
-      };
-      // Ayuda
-      document.getElementById('close-help').onclick = function() {
-        document.getElementById('help-modal').classList.add('hidden');
-      };
-      document.getElementById('btn-help').onclick = function() {
-        document.getElementById('help-modal').classList.remove('hidden');
-      };
-
-      // Splash fallback
-      setTimeout(() => {
-        const splash = document.getElementById('splash-screen');
-        const app = document.getElementById('app');
-        if (splash && app) {
-          splash.classList.add('hidden');
-          app.classList.remove('hidden');
-          if (!localStorage.getItem('stetos-permission-shown')) {
-            setTimeout(() => {
-              const pm = document.getElementById('permission-modal');
-              if (pm) pm.classList.remove('hidden');
-            }, 300);
-          }
+    // Permisos
+    document.getElementById('btn-permission-ok').onclick = function() {
+      document.getElementById('permission-modal').classList.add('hidden');
+      localStorage.setItem('stetos-permission-shown', 'true');
+    };
+    // Ayuda
+    document.getElementById('close-help').onclick = function() {
+      document.getElementById('help-modal').classList.add('hidden');
+    };
+    document.getElementById('btn-help').onclick = function() {
+      document.getElementById('help-modal').classList.remove('hidden');
+    };
+    // Splash fallback
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      const app = document.getElementById('app');
+      if (splash && app) {
+        splash.classList.add('hidden');
+        app.classList.remove('hidden');
+        if (!localStorage.getItem('stetos-permission-shown')) {
+          setTimeout(() => {
+            const pm = document.getElementById('permission-modal');
+            if (pm) pm.classList.remove('hidden');
+          }, 300);
         }
-      }, 5500);
-
-      // Service Worker (debe registrarse después del DOM)
-      if ('serviceWorker' in navigator) {
+      }
+    }, 5500);
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
         navigator.serviceWorker.register('/stetos-pwa/sw.js');
-      }
-
-      // ✅ Fix de viewport SIN interferir con PWA ni getUserMedia
-      function fixViewport() {
-        const app = document.getElementById('app');
-        if (app) {
-          app.style.height = window.innerHeight + 'px';
-          app.style.width = window.innerWidth + 'px';
-        }
-      }
-      window.addEventListener('resize', fixViewport);
-      window.addEventListener('orientationchange', () => setTimeout(fixViewport, 300));
-      fixViewport();
-    });
+      });
+    }
   </script>
 </body>
 </html>
