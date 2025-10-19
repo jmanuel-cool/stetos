@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Estetoscopio Electrónico</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
@@ -111,17 +111,6 @@
         navigator.serviceWorker.register('/stetos-pwa/sw.js');
       });
     }
-    // ✅ Fijar viewport en Android
-    function fixViewport() {
-      const app = document.getElementById('app');
-      if (app) {
-        app.style.height = window.innerHeight + 'px';
-        app.style.width = window.innerWidth + 'px';
-      }
-    }
-    window.addEventListener('load', fixViewport);
-    window.addEventListener('resize', fixViewport);
-    window.addEventListener('orientationchange', () => setTimeout(fixViewport, 300));
   </script>
 </body>
 </html>
