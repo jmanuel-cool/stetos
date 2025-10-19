@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estetoscopio Electrónico</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#283747" />
+  <link rel="icon" type="image/png" sizes="192x192" href="images/logo-192.png" />
+</head>
+<body>
+  <!-- Splash -->
+  <div id="splash-screen">
+    <video id="splash-video" autoplay muted playsinline>
+      <source src="splash/splash.mp4" type="video/mp4">
+      Tu navegador no soporta video.
+    </video>
+  </div>
+
+  <!-- App principal -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>ESTETOSCOPIO ELECTRÓNICO</h1>
+      <p>ETIR Pedro León Torres • 4to Electromedicina</p>
+    </header>
+
+    <main id="screen-home">
+      <button id="btn-help" class="help-button">❓</button>
+      <div id="mic-warning" class="warning hidden">
+        🔌 <strong>Conecta el micrófono externo</strong> antes de grabar.
+      </div>
+      <button id="btn-install" class="hidden">Instalar App</button>
+      <button id="btn-record">Grabar</button>
+      <button id="btn-exit">Salir</button>
+    </main>
+
+    <section id="screen-record" class="hidden">
+      <h2>Grabando... (12s)</h2>
+      <canvas id="waveform-live" width="760" height="300"></canvas>
+    </section>
+
+    <section id="screen-results" class="hidden">
+      <h2>Resultados</h2>
+      <canvas id="waveform-result" width="570" height="380"></canvas>
+      <div id="times-list">
+        <h3>TIEMPO (s)</h3>
+        <ul id="time-values"></ul>
+      </div>
+      <div id="classification"></div>
+      <button id="btn-export-pdf">Exportar PDF</button>
+      <button id="btn-results-back">Atrás</button>
+    </section>
+  </div>
+
+  <!-- Modal de ayuda -->
+  <div id="help-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="close-help" class="close">&times;</span>
+      <h2>Manual de Uso</h2>
+      <p><strong>¿Qué es esta app?</strong><br>Convierte tu dispositivo en un estetoscopio electrónico.</p>
+      <p><strong>Requisitos:</strong><br>- Micrófono externo (jack o USB)<br>- Navegador: Chrome, Edge o Firefox</p>
+      <p><strong>Uso:</strong><br>1. Conecta micrófono<br>2. Permite acceso al micrófono<br>3. Toca "Grabar"<br>4. Espera 12s<br>5. Ver resultados</p>
+      <p><strong>Diagnóstico:</strong><br>• Normal: 60–100 lpm<br>• Taquicardia: >100 lpm<br>• Bradicardia: <60 lpm</p>
+      <p><em>Esta app es una herramienta de apoyo. No sustituye evaluación clínica profesional.</em></p>
+    </div>
+  </div>
+
+  <!-- Modal de permisos (funcional) -->
+  <div id="permission-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Permisos necesarios</h2>
+      <p>Esta app requiere acceso al <strong>micrófono</strong> para funcionar.</p>
+      <p>Al tocar "Continuar", el navegador te pedirá permiso. Por favor, <strong>permítelo</strong>.</p>
+      <button id="btn-permission-ok">Continuar</button>
+    </div>
+  </div>
+
+  <script src="lib/tf.min.js"></script>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="app.js"></script>
+
+  <!-- Lógica crítica en línea -->
+  <script>
+    // Permisos
+    document.getElementById('btn-permission-ok').onclick = function() {
+      document.getElementById('permission-modal').classList.add('hidden');
+      localStorage.setItem('stetos-permission-shown', 'true');
+    };
+    // Ayuda
+    document.getElementById('close-help').onclick = function() {
+      document.getElementById('help-modal').classList.add('hidden');
+    };
+    document.getElementById('btn-help').onclick = function() {
+      document.getElementById('help-modal').classList.remove('hidden');
+    };
+    // Splash fallback
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      const app = document.getElementById('app');
+      if (splash && app) {
+        splash.classList.add('hidden');
+        app.classList.remove('hidden');
+        if (!localStorage.getItem('stetos-permission-shown')) {
+          setTimeout(() => {
+            const pm = document.getElementById('permission-modal');
+            if (pm) pm.classList.remove('hidden');
+          }, 300);
+        }
+      }
+    }, 5500);
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/stetos-pwa/sw.js');
+      });
+    }
+  </script>
+</body>
+</html>

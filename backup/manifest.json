@@ -1,0 +1,22 @@
+{
+  "name": "Estetoscopio Electrónico",
+  "short_name": "Estetoscopio",
+  "description": "Aplicación para análisis de sonidos cardíacos en tiempo real.",
+  "start_url": "/stetos-pwa/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#283747",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "images/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "images/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
