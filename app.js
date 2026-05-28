@@ -1,7 +1,6 @@
 let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
-
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
   const recordScreen = document.getElementById("screen-record");
@@ -13,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const installButton = document.getElementById("btn-install");
   const micWarning = document.getElementById("mic-warning");
 
-  // --- PWA Install ---
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
@@ -32,56 +30,39 @@ document.addEventListener('DOMContentLoaded', () => {
     installButton.classList.add("hidden");
   }
 
-  // --- Grabar con diagnóstico ---
   document.getElementById("btn-record").onclick = async () => {
     micWarning.classList.remove("hidden");
     setTimeout(() => micWarning.classList.add("hidden"), 4000);
 
-    // Diagnóstico paso a paso
-    if (!navigator.mediaDevices) {
-      alert("❌ Error: navigator.mediaDevices no está disponible.\nTu navegador no soporta acceso a micrófono.");
-      return;
-    }
+    let stream = null;
+    let useDemo = false;
 
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = devices.filter(d => d.kind === 'audioinput');
-      console.log("Dispositivos de audio encontrados:", audioInputs);
-
-      if (audioInputs.length === 0) {
-        alert("❌ No se detectó ningún micrófono.\n\nAsegúrate de:\n1. Tener un micrófono conectado\n2. Que el navegador tenga permiso\n3. Reiniciar la app tras conectar el micrófono");
-        return;
-      }
-
-      // Intentar acceso con restricciones explícitas
-      const constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100
-        }
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log("✅ Micrófono accesible:", stream);
-
-      // Iniciar grabación
-      startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
-
+      const constraints = { audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 } };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
-      console.error("Error al acceder al micrófono:", err);
-      let msg = "❌ Error al acceder al micrófono:\n\n";
-      if (err.name === "NotAllowedError") {
-        msg += "• No se permitió el micrófono.\n";
-      } else if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
-        msg += "• Micrófono no encontrado o no compatible.\n";
-      } else if (err.name === "NotReadableError") {
-        msg += "• Micrófono en uso por otra app.\n";
-      } else {
-        msg += "• Error desconocido: " + err.message + "\n";
+      console.warn("Micrófono no disponible. Usando audio de demostración.", err);
+      useDemo = true;
+    }
+
+    if (useDemo) {
+      const randomIndex = Math.floor(Math.random() * 7) + 1;
+      const audioUrl = `audio/${String(randomIndex).padStart(3, '0')}.mp3`;
+      try {
+        const response = await fetch(audioUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        analyzeAudio(recordedAudioBuffer, resultCanvas);
+        showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+      } catch (e) {
+        console.error("Error al cargar audio de demostración:", e);
+        recordedAudioBuffer = null;
+        analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos (demo no disponible)" };
+        showResults(null, resultCanvas, timeList, classificationDiv, resultsScreen, home);
       }
-      msg += "\nConsejos:\n• Conecta el micrófono ANTES de abrir la app\n• Ve a Ajustes > Apps > Chrome > Permisos > Micrófono = Permitir\n• Reinicia el teléfono si persiste";
-      alert(msg);
+    } else {
+      startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
     }
   };
 
@@ -95,13 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
 async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
   home.classList.add("hidden");
   recordScreen.classList.remove("hidden");
-
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(stream);
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 2048;
   source.connect(analyser);
-
   const canvasCtx = liveCanvas.getContext("2d");
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
@@ -109,10 +88,8 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
   const mediaRecorder = new MediaRecorder(stream);
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
   mediaRecorder.start();
-
   const duration = 12000;
   const startTime = Date.now();
-
   function draw() {
     if (Date.now() - startTime > duration) {
       mediaRecorder.stop();
@@ -138,9 +115,7 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
     canvasCtx.lineTo(liveCanvas.width, liveCanvas.height / 2);
     canvasCtx.stroke();
   }
-
   draw();
-
   mediaRecorder.onstop = async () => {
     const blob = new Blob(chunks, { type: "audio/wav" });
     const arrayBuffer = await blob.arrayBuffer();
@@ -151,6 +126,10 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
 }
 
 function analyzeAudio(recordedAudioBuffer, resultCanvas) {
+  if (!recordedAudioBuffer) {
+    analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos" };
+    return;
+  }
   const sampleRate = recordedAudioBuffer.sampleRate;
   const channelData = recordedAudioBuffer.getChannelData(0);
   const startIdx = Math.floor(2 * sampleRate);
