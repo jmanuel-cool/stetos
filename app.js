@@ -1,7 +1,6 @@
 let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
-let audioContextGlobal = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
@@ -13,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const classificationDiv = document.getElementById("classification");
   const installButton = document.getElementById("btn-install");
   const micWarning = document.getElementById("mic-warning");
-  
+
   // --- PWA Install ---
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -33,48 +32,59 @@ document.addEventListener('DOMContentLoaded', () => {
     installButton.classList.add("hidden");
   }
 
-  // --- Exit button ---
-  document.getElementById("btn-exit").onclick = () => {
-    window.close();
-  };
-
-  // --- Grabar con fallback a audio de demostración ---
+  // --- Grabar con diagnóstico ---
   document.getElementById("btn-record").onclick = async () => {
     micWarning.classList.remove("hidden");
     setTimeout(() => micWarning.classList.add("hidden"), 4000);
 
-    let stream = null;
-    let useDemo = false;
+    // Diagnóstico paso a paso
+    if (!navigator.mediaDevices) {
+      alert("❌ Error: navigator.mediaDevices no está disponible.\nTu navegador no soporta acceso a micrófono.");
+      return;
+    }
 
     try {
-      if (!navigator.mediaDevices) throw new Error("navigator.mediaDevices no disponible");
-      const constraints = { audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 } };
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (err) {
-      console.warn("Micrófono no disponible. Usando audio de demostración.", err);
-      useDemo = true;
-    }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      console.log("Dispositivos de audio encontrados:", audioInputs);
 
-    if (useDemo) {
-      const randomIndex = Math.floor(Math.random() * 7) + 1;
-      const audioUrl = `audio/${String(randomIndex).padStart(3, '0')}.mp3`;
-      try {
-        const response = await fetch(audioUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        audioContextGlobal = new (window.AudioContext || window.webkitAudioContext)();
-        recordedAudioBuffer = await audioContextGlobal.decodeAudioData(arrayBuffer);
-        analyzeAudio(recordedAudioBuffer, resultCanvas);
-        showResults();
-      } catch (e) {
-        console.error("Error al cargar audio de demostración:", e);
-        analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos" };
-        showResults();
+      if (audioInputs.length === 0) {
+        alert("❌ No se detectó ningún micrófono.\n\nAsegúrate de:\n1. Tener un micrófono conectado\n2. Que el navegador tenga permiso\n3. Reiniciar la app tras conectar el micrófono");
+        return;
       }
-    } else {
-      startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, resultsScreen);
+
+      // Intentar acceso con restricciones explícitas
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("✅ Micrófono accesible:", stream);
+
+      // Iniciar grabación
+      startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
+
+    } catch (err) {
+      console.error("Error al acceder al micrófono:", err);
+      let msg = "❌ Error al acceder al micrófono:\n\n";
+      if (err.name === "NotAllowedError") {
+        msg += "• No se permitió el micrófono.\n";
+      } else if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
+        msg += "• Micrófono no encontrado o no compatible.\n";
+      } else if (err.name === "NotReadableError") {
+        msg += "• Micrófono en uso por otra app.\n";
+      } else {
+        msg += "• Error desconocido: " + err.message + "\n";
+      }
+      msg += "\nConsejos:\n• Conecta el micrófono ANTES de abrir la app\n• Ve a Ajustes > Apps > Chrome > Permisos > Micrófono = Permitir\n• Reinicia el teléfono si persiste";
+      alert(msg);
     }
   };
-  
+
   document.getElementById("btn-results-back").onclick = () => {
     resultsScreen.classList.add("hidden");
     home.classList.remove("hidden");
@@ -82,13 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("btn-export-pdf").onclick = exportPDF;
 });
 
-async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, resultsScreen) {
+async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
   home.classList.add("hidden");
   recordScreen.classList.remove("hidden");
 
-  audioContextGlobal = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContextGlobal.createMediaStreamSource(stream);
-  const analyser = audioContextGlobal.createAnalyser();
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioContext.createMediaStreamSource(stream);
+  const analyser = audioContext.createAnalyser();
   analyser.fftSize = 2048;
   source.connect(analyser);
 
@@ -105,7 +115,7 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
 
   function draw() {
     if (Date.now() - startTime > duration) {
-      if (mediaRecorder.state === "recording") mediaRecorder.stop();
+      mediaRecorder.stop();
       stream.getTracks().forEach(track => track.stop());
       return;
     }
@@ -131,145 +141,84 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
 
   draw();
 
-  setTimeout(() => {
-    if (mediaRecorder.state === "recording") {
-      mediaRecorder.stop();
-      stream.getTracks().forEach(track => track.stop());
-    }
-  }, 12500);
-
   mediaRecorder.onstop = async () => {
-    try {
-      const blob = new Blob(chunks, { type: "audio/wav" });
-      const arrayBuffer = await blob.arrayBuffer();
-      recordedAudioBuffer = await audioContextGlobal.decodeAudioData(arrayBuffer);
-      analyzeAudio(recordedAudioBuffer, resultCanvas);
-    } catch (e) {
-      console.error("Error al procesar grabación:", e);
-      analyzedData = { segment: [], intervals: [], diagnosis: "Error al procesar audio" };
-    }
-    showResults();
+    const blob = new Blob(chunks, { type: "audio/wav" });
+    const arrayBuffer = await blob.arrayBuffer();
+    recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    analyzeAudio(recordedAudioBuffer, resultCanvas);
+    showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
   };
 }
 
 function analyzeAudio(recordedAudioBuffer, resultCanvas) {
-  let diagnosis = "Sin datos";
-  let intervals = [];
-  let normalized = [];
-
-  if (recordedAudioBuffer) {
-    const sampleRate = recordedAudioBuffer.sampleRate;
-    const channelData = recordedAudioBuffer.getChannelData(0);
-    const startIdx = Math.floor(2 * sampleRate);
-    const endIdx = Math.min(Math.floor(10 * sampleRate), channelData.length);
-    
-    if (startIdx < endIdx) {
-      const segment = channelData.slice(startIdx, endIdx);
-      normalized = segment.map(v => Math.max(0, Math.min(255, Math.floor((v * 128) + 127))));
-      
-      // Find peaks with better threshold
-      const peaks = [];
-      const threshold = 140; // Lower threshold for better detection
-      let i = 0;
-      while (i < normalized.length) {
-        if (normalized[i] > threshold) {
-          peaks.push(i);
-          // Skip ahead to avoid multiple detections of same beat
-          while (i + 1 < normalized.length && normalized[i + 1] > threshold - 20) i++;
-          i += Math.floor(sampleRate * 0.2); // Minimum 200ms between beats
-        }
-        i++;
-      }
-
-      // Calculate intervals between peaks
-      for (let j = 1; j < peaks.length; j++) {
-        const diff = peaks[j] - peaks[j - 1];
-        const timeDiff = diff / sampleRate;
-        // Only accept intervals between 0.3s and 2.0s (30-200 bpm range)
-        if (timeDiff >= 0.3 && timeDiff <= 2.0) {
-          intervals.push(timeDiff);
-        }
-      }
-
-      if (intervals.length > 0) {
-        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-        const bpm = 60 / avgInterval;
-        if (bpm >= 60 && bpm <= 100) diagnosis = `Normal (FC: ${bpm.toFixed(1)} bpm)`;
-        else if (bpm > 100) diagnosis = `Taquicardia (FC: ${bpm.toFixed(1)} bpm)`;
-        else if (bpm < 60) diagnosis = `Bradicardia (FC: ${bpm.toFixed(1)} bpm)`;
-      } else {
-        diagnosis = "No se detectaron latidos regulares";
-      }
+  const sampleRate = recordedAudioBuffer.sampleRate;
+  const channelData = recordedAudioBuffer.getChannelData(0);
+  const startIdx = Math.floor(2 * sampleRate);
+  const endIdx = Math.floor(10 * sampleRate);
+  const segment = channelData.slice(startIdx, endIdx);
+  const normalized = segment.map(v => Math.max(0, Math.min(255, Math.floor((v * 128) + 127))));
+  const peaks = [];
+  let i = 0;
+  while (i < normalized.length) {
+    if (normalized[i] > 130) {
+      peaks.push(i);
+      while (i + 1 < normalized.length && normalized[i + 1] > 150) i++;
     }
+    i++;
   }
-
+  const intervals = [];
+  for (let j = peaks.length - 1; j > 0; j--) {
+    const diff = peaks[j] - peaks[j - 1];
+    if (diff > 1000) intervals.push(diff / sampleRate);
+  }
+  let diagnosis = "Sin datos";
+  if (intervals.length > 0) {
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const bpm = 60 / avgInterval;
+    if (bpm >= 60 && bpm <= 100) diagnosis = `Normal (FC: ${bpm.toFixed(1)} bpm)`;
+    else if (bpm > 100) diagnosis = `Taquicardia (FC: ${bpm.toFixed(1)} bpm)`;
+    else if (bpm < 60) diagnosis = `Bradicardia (FC: ${bpm.toFixed(1)} bpm)`;
+  }
   analyzedData = { segment: normalized, intervals, diagnosis };
-
-  // Dibujar waveform
   const ctx = resultCanvas.getContext("2d");
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
-  if (normalized.length > 0) {
-    ctx.beginPath();
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
-    const step = normalized.length / resultCanvas.width;
-    for (let x = 0; x < resultCanvas.width; x++) {
-      const idx = Math.floor(x * step);
-      const y = (1 - normalized[idx] / 255) * resultCanvas.height;
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  const step = normalized.length / resultCanvas.width;
+  for (let x = 0; x < resultCanvas.width; x++) {
+    const idx = Math.floor(x * step);
+    const y = (1 - normalized[idx] / 255) * resultCanvas.height;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   }
+  ctx.stroke();
 }
 
-function showResults() {
-  const timeList = document.getElementById("time-values");
-  const classificationDiv = document.getElementById("classification");
-  const resultsScreen = document.getElementById("screen-results");
-
-  if (timeList && classificationDiv && resultsScreen) {
-    timeList.innerHTML = "";
-    if (analyzedData && analyzedData.intervals) {
-      analyzedData.intervals.forEach(t => {
-        const li = document.createElement("li");
-        li.textContent = t.toFixed(4);
-        timeList.appendChild(li);
-      });
-    }
-    
-    const diagnosisText = analyzedData ? analyzedData.diagnosis : "Sin datos";
-    classificationDiv.innerHTML = `<h3>Diagnóstico:</h3><p>${diagnosisText}</p>`;
-    resultsScreen.classList.remove("hidden");
-  }
+function showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home) {
+  if (!analyzedData) return;
+  timeList.innerHTML = "";
+  analyzedData.intervals.forEach(t => {
+    const li = document.createElement("li");
+    li.textContent = t.toFixed(4);
+    timeList.appendChild(li);
+  });
+  classificationDiv.innerHTML = `<h3>Diagnóstico:</h3><p>${analyzedData.diagnosis}</p>`;
+  resultsScreen.classList.remove("hidden");
 }
 
 function exportPDF() {
   if (!analyzedData) return;
-  
-  // Check if jsPDF is available - it's exported as window.jspdf.jsPDF
-  let jsPDFConstructor = null;
-  if (window.jspdf && window.jspdf.jsPDF) {
-    jsPDFConstructor = window.jspdf.jsPDF;
-  } else if (window.jsPDF) {
-    jsPDFConstructor = window.jsPDF;
-  }
-  
-  if (!jsPDFConstructor) {
-    console.error("jsPDF library not loaded. Available on window:", Object.keys(window).filter(k => k.toLowerCase().includes('pdf')));
-    alert("Error: La biblioteca PDF no está cargada correctamente. Por favor recarga la página.");
-    return;
-  }
-  
-  const doc = new jsPDFConstructor();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
   doc.setFontSize(18);
   doc.text("Estetoscopio Electrónico - Resultados", 15, 20);
   doc.setFontSize(12);
   doc.text(`Diagnóstico: ${analyzedData.diagnosis}`, 15, 30);
   doc.text("Tiempos entre latidos (s):", 15, 40);
   let y = 45;
-  (analyzedData.intervals || []).forEach(t => {
+  analyzedData.intervals.forEach(t => {
     doc.text(t.toFixed(4), 20, y);
     y += 5;
     if (y > 280) {
@@ -277,7 +226,7 @@ function exportPDF() {
       y = 20;
     }
   });
-  const imgData = document.getElementById("waveform-result").toDataURL("image/png");
+  const imgData = resultCanvas.toDataURL("image/png");
   doc.addPage();
   doc.text("Waveform del segmento analizado:", 15, 20);
   doc.addImage(imgData, "PNG", 15, 30, 180, 120);
