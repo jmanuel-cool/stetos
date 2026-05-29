@@ -167,19 +167,28 @@ function analyzeAudio(recordedAudioBuffer, resultCanvas) {
       const segment = channelData.slice(startIdx, endIdx);
       normalized = segment.map(v => Math.max(0, Math.min(255, Math.floor((v * 128) + 127))));
       
+      // Find peaks with better threshold
       const peaks = [];
+      const threshold = 140; // Lower threshold for better detection
       let i = 0;
       while (i < normalized.length) {
-        if (normalized[i] > 130) {
+        if (normalized[i] > threshold) {
           peaks.push(i);
-          while (i + 1 < normalized.length && normalized[i + 1] > 150) i++;
+          // Skip ahead to avoid multiple detections of same beat
+          while (i + 1 < normalized.length && normalized[i + 1] > threshold - 20) i++;
+          i += Math.floor(sampleRate * 0.2); // Minimum 200ms between beats
         }
         i++;
       }
 
-      for (let j = peaks.length - 1; j > 0; j--) {
+      // Calculate intervals between peaks
+      for (let j = 1; j < peaks.length; j++) {
         const diff = peaks[j] - peaks[j - 1];
-        if (diff > 1000) intervals.push(diff / sampleRate);
+        const timeDiff = diff / sampleRate;
+        // Only accept intervals between 0.3s and 2.0s (30-200 bpm range)
+        if (timeDiff >= 0.3 && timeDiff <= 2.0) {
+          intervals.push(timeDiff);
+        }
       }
 
       if (intervals.length > 0) {
@@ -188,6 +197,8 @@ function analyzeAudio(recordedAudioBuffer, resultCanvas) {
         if (bpm >= 60 && bpm <= 100) diagnosis = `Normal (FC: ${bpm.toFixed(1)} bpm)`;
         else if (bpm > 100) diagnosis = `Taquicardia (FC: ${bpm.toFixed(1)} bpm)`;
         else if (bpm < 60) diagnosis = `Bradicardia (FC: ${bpm.toFixed(1)} bpm)`;
+      } else {
+        diagnosis = "No se detectaron latidos regulares";
       }
     }
   }
@@ -236,8 +247,22 @@ function showResults() {
 
 function exportPDF() {
   if (!analyzedData) return;
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  
+  // Check if jsPDF is available - it's exported as window.jspdf.jsPDF
+  let jsPDFConstructor = null;
+  if (window.jspdf && window.jspdf.jsPDF) {
+    jsPDFConstructor = window.jspdf.jsPDF;
+  } else if (window.jsPDF) {
+    jsPDFConstructor = window.jsPDF;
+  }
+  
+  if (!jsPDFConstructor) {
+    console.error("jsPDF library not loaded. Available on window:", Object.keys(window).filter(k => k.toLowerCase().includes('pdf')));
+    alert("Error: La biblioteca PDF no está cargada correctamente. Por favor recarga la página.");
+    return;
+  }
+  
+  const doc = new jsPDFConstructor();
   doc.setFontSize(18);
   doc.text("Estetoscopio Electrónico - Resultados", 15, 20);
   doc.setFontSize(12);
