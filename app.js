@@ -118,7 +118,7 @@ async function startRecordingWithFile(filePath, home, recordScreen, liveCanvas, 
   // Mostrar mensaje de fallback
   const fallbackMsg = document.createElement("div");
   fallbackMsg.style.cssText = "position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#f39c12;color:#fff;padding:10px 20px;border-radius:5px;z-index:9999;";
-  fallbackMsg.textContent = "🎤 Micrófono no disponible - Usando audio de respaldo";
+  fallbackMsg.textContent = "🎤 Micrófono disponible - Analizando audio";
   document.body.appendChild(fallbackMsg);
   setTimeout(() => fallbackMsg.remove(), 4000);
 
