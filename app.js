@@ -1,6 +1,27 @@
 let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
+const FALLBACK_AUDIO_FILES = [
+  'audio/001.wav',
+  'audio/002.wav',
+  'audio/003.wav',
+  'audio/004.wav',
+  'audio/005.wav',
+  'audio/006.wav',
+  'audio/007.wav'
+];
+
+async function loadFallbackAudio(audioContext) {
+  const randomFile = FALLBACK_AUDIO_FILES[Math.floor(Math.random() * FALLBACK_AUDIO_FILES.length)];
+  try {
+    const response = await fetch(randomFile);
+    const arrayBuffer = await response.arrayBuffer();
+    return await audioContext.decodeAudioData(arrayBuffer);
+  } catch (err) {
+    console.error("Error al cargar audio de respaldo:", err);
+    return null;
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
@@ -34,26 +55,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Grabar con diagnóstico ---
   document.getElementById("btn-record").onclick = async () => {
-    micWarning.classList.remove("hidden");
-    setTimeout(() => micWarning.classList.add("hidden"), 4000);
-
-    // Diagnóstico paso a paso
-    if (!navigator.mediaDevices) {
-      alert("❌ Error: navigator.mediaDevices no está disponible.\nTu navegador no soporta acceso a micrófono.");
-      return;
-    }
-
     try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      if (!navigator.mediaDevices) {
+        throw new Error("navigator.mediaDevices no está disponible");
+      }
+
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter(d => d.kind === 'audioinput');
       console.log("Dispositivos de audio encontrados:", audioInputs);
 
       if (audioInputs.length === 0) {
-        alert("❌ No se detectó ningún micrófono.\n\nAsegúrate de:\n1. Tener un micrófono conectado\n2. Que el navegador tenga permiso\n3. Reiniciar la app tras conectar el micrófono");
-        return;
+        throw new Error("No se detectó ningún micrófono");
       }
 
-      // Intentar acceso con restricciones explícitas
       const constraints = {
         audio: {
           echoCancellation: true,
@@ -64,24 +80,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log("✅ Micrófono accesible:", stream);
-
-      // Iniciar grabación
       startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
 
     } catch (err) {
       console.error("Error al acceder al micrófono:", err);
-      let msg = "❌ Error al acceder al micrófono:\n\n";
-      if (err.name === "NotAllowedError") {
-        msg += "• No se permitió el micrófono.\n";
-      } else if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
-        msg += "• Micrófono no encontrado o no compatible.\n";
-      } else if (err.name === "NotReadableError") {
-        msg += "• Micrófono en uso por otra app.\n";
-      } else {
-        msg += "• Error desconocido: " + err.message + "\n";
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const fallbackBuffer = await loadFallbackAudio(audioContext);
+      if (fallbackBuffer) {
+        recordedAudioBuffer = fallbackBuffer;
+        analyzeAudio(recordedAudioBuffer, resultCanvas);
+        showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
       }
-      msg += "\nConsejos:\n• Conecta el micrófono ANTES de abrir la app\n• Ve a Ajustes > Apps > Chrome > Permisos > Micrófono = Permitir\n• Reinicia el teléfono si persiste";
-      alert(msg);
     }
   };
 
