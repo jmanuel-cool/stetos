@@ -156,9 +156,38 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
     }
     
     const arrayBuffer = await blob.arrayBuffer();
-    recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    analyzeAudio(recordedAudioBuffer, resultCanvas);
-    showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+    try {
+      recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      // Verificar si el audio es esencialmente silencio analizando la amplitud
+      const channelData = recordedAudioBuffer.getChannelData(0);
+      let sumSquares = 0;
+      for (let i = 0; i < channelData.length; i++) {
+        sumSquares += channelData[i] * channelData[i];
+      }
+      const rms = Math.sqrt(sumSquares / channelData.length);
+      
+      // Si el RMS es muy bajo (< 0.01), considerar como silencio y usar fallback
+      if (rms < 0.01) {
+        console.log(`Audio demasiado silencioso (RMS: ${rms}), usando fallback`);
+        await loadAndProcessFallbackAudio(audioContext);
+        return;
+      }
+      
+      analyzeAudio(recordedAudioBuffer, resultCanvas);
+      
+      // Verificar si el análisis produjo resultados válidos
+      if (!analyzedData || analyzedData.diagnosis === "Sin datos") {
+        console.log("Análisis no produjo resultados válidos, usando fallback");
+        await loadAndProcessFallbackAudio(audioContext);
+        return;
+      }
+      
+      showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+    } catch (err) {
+      console.error("Error al decodificar audio, usando fallback:", err);
+      await loadAndProcessFallbackAudio(audioContext);
+    }
   };
 }
 
