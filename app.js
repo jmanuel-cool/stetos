@@ -1,6 +1,7 @@
 let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
   const recordScreen = document.getElementById("screen-record");
@@ -12,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const installButton = document.getElementById("btn-install");
   const micWarning = document.getElementById("mic-warning");
 
+  // --- PWA Install ---
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     installButton.classList.add("hidden");
   }
 
+  // --- Grabar con fallback a audio de demostración (SIN ALERTAS) ---
   document.getElementById("btn-record").onclick = async () => {
     micWarning.classList.remove("hidden");
     setTimeout(() => micWarning.classList.add("hidden"), 4000);
@@ -38,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let useDemo = false;
 
     try {
+      if (!navigator.mediaDevices) throw new Error("navigator.mediaDevices no disponible");
       const constraints = { audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 } };
       stream = await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
@@ -46,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (useDemo) {
+      // Cargar audio de demostración sin interrumpir al usuario
       const randomIndex = Math.floor(Math.random() * 7) + 1;
       const audioUrl = `audio/${String(randomIndex).padStart(3, '0')}.mp3`;
       try {
@@ -57,11 +62,13 @@ document.addEventListener('DOMContentLoaded', () => {
         showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
       } catch (e) {
         console.error("Error al cargar audio de demostración:", e);
+        // Si ni siquiera el demo funciona, usar buffer vacío pero permitir mostrar interfaz
         recordedAudioBuffer = null;
-        analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos (demo no disponible)" };
+        analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos" };
         showResults(null, resultCanvas, timeList, classificationDiv, resultsScreen, home);
       }
     } else {
+      // Micrófono funcionó: grabar normalmente
       startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
     }
   };
@@ -76,11 +83,13 @@ document.addEventListener('DOMContentLoaded', () => {
 async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
   home.classList.add("hidden");
   recordScreen.classList.remove("hidden");
+
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioContext.createMediaStreamSource(stream);
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 2048;
   source.connect(analyser);
+
   const canvasCtx = liveCanvas.getContext("2d");
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
@@ -88,11 +97,13 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
   const mediaRecorder = new MediaRecorder(stream);
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
   mediaRecorder.start();
+
   const duration = 12000;
   const startTime = Date.now();
+
   function draw() {
     if (Date.now() - startTime > duration) {
-      mediaRecorder.stop();
+      if (mediaRecorder.state === "recording") mediaRecorder.stop();
       stream.getTracks().forEach(track => track.stop());
       return;
     }
@@ -115,13 +126,30 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
     canvasCtx.lineTo(liveCanvas.width, liveCanvas.height / 2);
     canvasCtx.stroke();
   }
+
   draw();
+
+  // Respaldo: asegurar que onstop se ejecute incluso si RAf falla
+  setTimeout(() => {
+    if (mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+      stream.getTracks().forEach(track => track.stop());
+    }
+  }, 12500);
+
   mediaRecorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: "audio/wav" });
-    const arrayBuffer = await blob.arrayBuffer();
-    recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    analyzeAudio(recordedAudioBuffer, resultCanvas);
-    showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+    try {
+      const blob = new Blob(chunks, { type: "audio/wav" });
+      const arrayBuffer = await blob.arrayBuffer();
+      recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      analyzeAudio(recordedAudioBuffer, resultCanvas);
+      showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+    } catch (e) {
+      console.error("Error al procesar grabación:", e);
+      recordedAudioBuffer = null;
+      analyzedData = { segment: [], intervals: [], diagnosis: "Error al procesar audio" };
+      showResults(null, resultCanvas, timeList, classificationDiv, resultsScreen, home);
+    }
   };
 }
 
