@@ -2,17 +2,6 @@ let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
 
-// Lista de archivos de respaldo para fallback
-const FALLBACK_AUDIO_FILES = [
-  'audio/001.wav',
-  'audio/002.wav',
-  'audio/003.wav',
-  'audio/004.wav',
-  'audio/005.wav',
-  'audio/006.wav',
-  'audio/007.wav'
-];
-
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
   const recordScreen = document.getElementById("screen-record");
@@ -43,16 +32,56 @@ document.addEventListener('DOMContentLoaded', () => {
     installButton.classList.add("hidden");
   }
 
-  // --- Grabar con diagnóstico y fallback ---
+  // --- Grabar con diagnóstico ---
   document.getElementById("btn-record").onclick = async () => {
     micWarning.classList.remove("hidden");
     setTimeout(() => micWarning.classList.add("hidden"), 4000);
 
-    // Intentar grabación normal, si falla usar archivo de respaldo
+    // Diagnóstico paso a paso
+    if (!navigator.mediaDevices) {
+      alert("❌ Error: navigator.mediaDevices no está disponible.\nTu navegador no soporta acceso a micrófono.");
+      return;
+    }
+
     try {
-      await startRecordingWithMicOrFallback(home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      console.log("Dispositivos de audio encontrados:", audioInputs);
+
+      if (audioInputs.length === 0) {
+        alert("❌ No se detectó ningún micrófono.\n\nAsegúrate de:\n1. Tener un micrófono conectado\n2. Que el navegador tenga permiso\n3. Reiniciar la app tras conectar el micrófono");
+        return;
+      }
+
+      // Intentar acceso con restricciones explícitas
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("✅ Micrófono accesible:", stream);
+
+      // Iniciar grabación
+      startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
+
     } catch (err) {
-      console.error("Error en grabación:", err);
+      console.error("Error al acceder al micrófono:", err);
+      let msg = "❌ Error al acceder al micrófono:\n\n";
+      if (err.name === "NotAllowedError") {
+        msg += "• No se permitió el micrófono.\n";
+      } else if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
+        msg += "• Micrófono no encontrado o no compatible.\n";
+      } else if (err.name === "NotReadableError") {
+        msg += "• Micrófono en uso por otra app.\n";
+      } else {
+        msg += "• Error desconocido: " + err.message + "\n";
+      }
+      msg += "\nConsejos:\n• Conecta el micrófono ANTES de abrir la app\n• Ve a Ajustes > Apps > Chrome > Permisos > Micrófono = Permitir\n• Reinicia el teléfono si persiste";
+      alert(msg);
     }
   };
 
@@ -62,124 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.getElementById("btn-export-pdf").onclick = exportPDF;
 });
-
-async function startRecordingWithMicOrFallback(home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
-  // Intentar obtener acceso al micrófono
-  let stream = null;
-  let useFallback = false;
-
-  try {
-    if (!navigator.mediaDevices) {
-      throw new Error("navigator.mediaDevices no disponible");
-    }
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const audioInputs = devices.filter(d => d.kind === 'audioinput');
-
-    if (audioInputs.length === 0) {
-      throw new Error("No hay micrófonos disponibles");
-    }
-
-    const constraints = {
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        sampleRate: 44100
-      }
-    };
-
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
-    console.log("✅ Micrófono accesible");
-
-  } catch (err) {
-    console.warn("⚠️ Falló el micrófono, usando archivo de respaldo:", err.message);
-    useFallback = true;
-  }
-
-  if (useFallback) {
-    // Seleccionar archivo aleatorio
-    const randomIndex = Math.floor(Math.random() * FALLBACK_AUDIO_FILES.length);
-    const selectedFile = FALLBACK_AUDIO_FILES[randomIndex];
-    console.log("📁 Usando archivo de respaldo:", selectedFile);
-    
-    await startRecordingWithFile(selectedFile, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
-  } else {
-    // Usar micrófono normal
-    startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen);
-  }
-}
-
-async function startRecordingWithFile(filePath, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
-  home.classList.add("hidden");
-  recordScreen.classList.remove("hidden");
-
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  
-  // Mostrar mensaje de fallback
-  const fallbackMsg = document.createElement("div");
-  fallbackMsg.style.cssText = "position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#f39c12;color:#fff;padding:10px 20px;border-radius:5px;z-index:9999;";
-  fallbackMsg.textContent = "🎤 Micrófono disponible - Analizando audio";
-  document.body.appendChild(fallbackMsg);
-  setTimeout(() => fallbackMsg.remove(), 4000);
-
-  try {
-    // Cargar archivo de audio
-    const response = await fetch(filePath);
-    const arrayBuffer = await response.arrayBuffer();
-    recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    
-    // Simular visualización en vivo mientras "graba"
-    const canvasCtx = liveCanvas.getContext("2d");
-    const channelData = recordedAudioBuffer.getChannelData(0);
-    const bufferLength = 2048;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const duration = 12000;
-    const startTime = Date.now();
-    let offset = 0;
-
-    function draw() {
-      if (Date.now() - startTime > duration) {
-        analyzeAudio(recordedAudioBuffer, resultCanvas);
-        showResults(recordedAudioBuffer, resultCanvas, timeList, classificationDiv, resultsScreen, home);
-        return;
-      }
-      requestAnimationFrame(draw);
-      
-      // Simular datos de waveform desde el archivo
-      for (let i = 0; i < bufferLength; i++) {
-        const idx = Math.floor((offset + i) % channelData.length);
-        dataArray[i] = Math.floor((channelData[idx] + 1) * 127.5);
-      }
-      offset += 100;
-      
-      canvasCtx.fillStyle = "rgba(0,0,0,0.5)";
-      canvasCtx.fillRect(0, 0, liveCanvas.width, liveCanvas.height);
-      canvasCtx.lineWidth = 1.5;
-      canvasCtx.strokeStyle = "#fff";
-      canvasCtx.beginPath();
-      const sliceWidth = liveCanvas.width / bufferLength;
-      let x = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = v * liveCanvas.height / 2;
-        if (i === 0) canvasCtx.moveTo(x, y);
-        else canvasCtx.lineTo(x, y);
-        x += sliceWidth;
-      }
-      canvasCtx.lineTo(liveCanvas.width, liveCanvas.height / 2);
-      canvasCtx.stroke();
-    }
-
-    draw();
-
-  } catch (err) {
-    console.error("Error al cargar archivo de respaldo:", err);
-    alert("❌ Error al cargar audio de respaldo");
-    home.classList.remove("hidden");
-    recordScreen.classList.add("hidden");
-  }
-}
 
 async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, timeList, classificationDiv, resultsScreen) {
   home.classList.add("hidden");
