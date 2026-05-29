@@ -6,31 +6,39 @@ __pycache__/
 dist/
 build/
 target/
+
 # Dependencies
 .venv/
 venv/
 node_modules/
 .mypy_cache/
 .pytest_cache/
-.coverage
+.gradle/
+
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 *.swo
+
 # Environment
 .env
 .env.local
 *.env.*
+
 # Editors
 .vscode/
 .idea/
-# OS generated files
+
+# System files
 .DS_Store
 Thumbs.db
-# Coverage reports
+
+# Coverage
 coverage/
 htmlcov/
+.coverage
+
 # Compressed files
 *.zip
 *.gz
