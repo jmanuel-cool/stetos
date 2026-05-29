@@ -1,6 +1,7 @@
 let recordedAudioBuffer = null;
 let analyzedData = null;
 let deferredPrompt = null;
+let audioContextGlobal = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const home = document.getElementById("screen-home");
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const classificationDiv = document.getElementById("classification");
   const installButton = document.getElementById("btn-install");
   const micWarning = document.getElementById("mic-warning");
-
+  
   // --- PWA Install ---
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -32,7 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
     installButton.classList.add("hidden");
   }
 
-  // --- Grabar con fallback a audio de demostración (SIN ALERTAS) ---
+  // --- Exit button ---
+  document.getElementById("btn-exit").onclick = () => {
+    window.close();
+  };
+
+  // --- Grabar con fallback a audio de demostración ---
   document.getElementById("btn-record").onclick = async () => {
     micWarning.classList.remove("hidden");
     setTimeout(() => micWarning.classList.add("hidden"), 4000);
@@ -55,20 +61,20 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const response = await fetch(audioUrl);
         const arrayBuffer = await response.arrayBuffer();
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        audioContextGlobal = new (window.AudioContext || window.webkitAudioContext)();
+        recordedAudioBuffer = await audioContextGlobal.decodeAudioData(arrayBuffer);
         analyzeAudio(recordedAudioBuffer, resultCanvas);
-        showResults(); // ← sin parámetros
+        showResults();
       } catch (e) {
         console.error("Error al cargar audio de demostración:", e);
         analyzedData = { segment: [], intervals: [], diagnosis: "Sin datos" };
-        showResults(); // ← siempre mostrar
+        showResults();
       }
     } else {
       startRecordingWithStream(stream, home, recordScreen, liveCanvas, resultCanvas, resultsScreen);
     }
   };
-
+  
   document.getElementById("btn-results-back").onclick = () => {
     resultsScreen.classList.add("hidden");
     home.classList.remove("hidden");
@@ -80,9 +86,9 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
   home.classList.add("hidden");
   recordScreen.classList.remove("hidden");
 
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
+  audioContextGlobal = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioContextGlobal.createMediaStreamSource(stream);
+  const analyser = audioContextGlobal.createAnalyser();
   analyser.fftSize = 2048;
   source.connect(analyser);
 
@@ -136,13 +142,13 @@ async function startRecordingWithStream(stream, home, recordScreen, liveCanvas, 
     try {
       const blob = new Blob(chunks, { type: "audio/wav" });
       const arrayBuffer = await blob.arrayBuffer();
-      recordedAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      recordedAudioBuffer = await audioContextGlobal.decodeAudioData(arrayBuffer);
       analyzeAudio(recordedAudioBuffer, resultCanvas);
     } catch (e) {
       console.error("Error al procesar grabación:", e);
       analyzedData = { segment: [], intervals: [], diagnosis: "Error al procesar audio" };
     }
-    showResults(); // ← siempre llamar, sin parámetros
+    showResults();
   };
 }
 
@@ -155,7 +161,6 @@ function analyzeAudio(recordedAudioBuffer, resultCanvas) {
     const sampleRate = recordedAudioBuffer.sampleRate;
     const channelData = recordedAudioBuffer.getChannelData(0);
     const startIdx = Math.floor(2 * sampleRate);
-    // ✅ Corrección: no exceder la longitud del audio
     const endIdx = Math.min(Math.floor(10 * sampleRate), channelData.length);
     
     if (startIdx < endIdx) {
@@ -187,7 +192,6 @@ function analyzeAudio(recordedAudioBuffer, resultCanvas) {
     }
   }
 
-  // ✅ Siempre asignar analyzedData
   analyzedData = { segment: normalized, intervals, diagnosis };
 
   // Dibujar waveform
@@ -210,7 +214,6 @@ function analyzeAudio(recordedAudioBuffer, resultCanvas) {
 }
 
 function showResults() {
-  // ✅ Usar variables globales, no parámetros
   const timeList = document.getElementById("time-values");
   const classificationDiv = document.getElementById("classification");
   const resultsScreen = document.getElementById("screen-results");
